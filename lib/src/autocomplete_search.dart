@@ -5,7 +5,6 @@ import 'package:google_maps_place_picker/google_maps_place_picker.dart';
 import 'package:google_maps_place_picker/providers/place_provider.dart';
 import 'package:google_maps_place_picker/providers/search_provider.dart';
 import 'package:google_maps_place_picker/src/components/prediction_tile.dart';
-import 'package:google_maps_place_picker/src/components/rounded_frame.dart';
 import 'package:google_maps_place_picker/src/controllers/autocomplete_search_controller.dart';
 import 'package:google_maps_webservice/places.dart';
 import 'package:provider/provider.dart';
@@ -34,9 +33,9 @@ class AutoCompleteSearch extends StatefulWidget {
     this.searchForInitialValue,
     this.autocompleteOnTrailingWhitespace,
     this.customTextField,
+    this.overridedAutocompleteRequest,
     required this.searchController,
-  })   : assert(searchBarController != null),
-        super(key: key);
+  }) : super(key: key);
 
   final String? sessionToken;
   final String? hintText;
@@ -60,6 +59,7 @@ class AutoCompleteSearch extends StatefulWidget {
   final bool? autocompleteOnTrailingWhitespace;
   final Widget? customTextField;
   final TextEditingController searchController;
+  final Future<PlacesAutocompleteResponse> Function(String searchTerm)? overridedAutocompleteRequest;
 
   @override
   AutoCompleteSearchState createState() => AutoCompleteSearchState();
@@ -102,32 +102,34 @@ class AutoCompleteSearchState extends State<AutoCompleteSearch> {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: provider,
-      child: widget.customTextField ??
-          RoundedFrame(
-            height: widget.height,
-            padding: const EdgeInsets.only(right: 10),
-            color: Theme.of(context).brightness == Brightness.dark ? Colors.black54 : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            elevation: 8.0,
-            child: Row(
-              children: <Widget>[
-                SizedBox(width: 10),
-                Icon(Icons.search),
-                SizedBox(width: 10),
-                Expanded(child: _buildSearchTextField()),
-                _buildTextClearIcon(),
-              ],
+    return Focus(
+      focusNode: focus,
+      child: ChangeNotifierProvider.value(
+        value: provider,
+        child: widget.customTextField ??
+            RoundedFrame(
+              height: widget.height,
+              padding: const EdgeInsets.only(right: 10),
+              color: Theme.of(context).brightness == Brightness.dark ? Colors.black54 : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              elevation: 8.0,
+              child: Row(
+                children: <Widget>[
+                  SizedBox(width: 10),
+                  Icon(Icons.search),
+                  SizedBox(width: 10),
+                  Expanded(child: _buildSearchTextField()),
+                  _buildTextClearIcon(),
+                ],
+              ),
             ),
-          ),
+      ),
     );
   }
 
   Widget _buildSearchTextField() {
     return TextField(
       controller: widget.searchController,
-      focusNode: focus,
       decoration: InputDecoration(
         hintText: widget.hintText,
         border: InputBorder.none,
@@ -283,20 +285,22 @@ class AutoCompleteSearchState extends State<AutoCompleteSearch> {
     PlaceProvider provider = PlaceProvider.of(context, listen: false);
 
     if (searchTerm.isNotEmpty) {
-      final PlacesAutocompleteResponse response = await provider.places.autocomplete(
-        searchTerm,
-        sessionToken: widget.sessionToken,
-        location: provider.currentPosition == null
-            ? null
-            : Location(lat: provider.currentPosition!.latitude, lng: provider.currentPosition!.longitude),
-        offset: widget.autocompleteOffset,
-        radius: widget.autocompleteRadius,
-        language: widget.autocompleteLanguage,
-        types: widget.autocompleteTypes ?? const [],
-        components: widget.autocompleteComponents ?? const [],
-        strictbounds: widget.strictbounds ?? false,
-        region: widget.region,
-      );
+      final PlacesAutocompleteResponse response = widget.overridedAutocompleteRequest != null
+          ? await widget.overridedAutocompleteRequest!(searchTerm)
+          : await provider.places.autocomplete(
+              searchTerm,
+              sessionToken: widget.sessionToken,
+              location: provider.currentPosition == null
+                  ? null
+                  : Location(lat: provider.currentPosition!.latitude, lng: provider.currentPosition!.longitude),
+              offset: widget.autocompleteOffset,
+              radius: widget.autocompleteRadius,
+              language: widget.autocompleteLanguage,
+              types: widget.autocompleteTypes ?? const [],
+              components: widget.autocompleteComponents ?? const [],
+              strictbounds: widget.strictbounds ?? false,
+              region: widget.region,
+            );
 
       if (response.errorMessage?.isNotEmpty == true || response.status == "REQUEST_DENIED") {
         if (widget.onSearchFailed != null) {
